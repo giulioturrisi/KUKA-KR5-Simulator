@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Kuka KR5-850 Simulator</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				background:#777;
+				padding:0;
+				margin:0;
+				font-weight: bold;
+				overflow:hidden;
+			}
+
+			#info {
+				position: absolute;
+				top: 0px;
+				width: 100%;
+				color: #ffffff;
+				padding: 5px;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+			}
+
+			a {
+				color: #ffffff;
+			}
+		</style>
+	</head>
+	<body>
+
+		<div id="container"></div>
+		<div id="info">
+			Kuka KR5-850 Simulator
+		</div>
+
+		<script src="three.js-master/build/three.js"></script>
+		<script src="three.js-master/examples/js/controls/OrbitControls.js"></script>
+		<script src="three.js-master/examples/js/Detector.js"></script>
+		<script src="three.js-master/examples/js/libs/stats.min.js"></script>
+		<script src="three.js-master/examples/js/loaders/STLLoader.js"></script>
+		<script src="three.js-master/examples/js/Detector.js"></script>
+		<script src="three.js-master/examples/js/renderers/Projector.js"></script>
+		<script src="three.js-master/examples/js/renderers/CanvasRenderer.js"></script> 
+		<script src="three.js-master/examples/js/libs/tween.min.js"></script>
+		<script src="three.js-master/examples/js/libs/stats.min.js"></script>
+		<script src="three.js-master/examples/js/libs/dat.gui.min.js"></script>
+		<script src="math.js" type="text/javascript"></script>
+		<script>
+
+			if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+
+			var container, stats, clock;
+			var camera, scene, renderer, mixer;
+			var spotLight,rtectLightHelper;
+			var cube_activated = [];
+			var cube_activated_second = [];
+			var cube_clicked;
+			var cube_materials;
+			var joint1 = 0,joint2 = 0,joint3 = 0,joint4 = 0,joint5 = 0,poseX = 0,poseY = 0,poseZ = 0;
+			var st_block = new THREE.Object3D();
+			var nd_block = new THREE.Object3D();
+		    var rd_block = new THREE.Object3D();
+		    var rt_block = new THREE.Object3D();
+			var ee_block = new THREE.Object3D();
+			var ee;
+			var cubeAttached;
+			var raycaster = new THREE.Raycaster();
+			var mouse = new THREE.Vector2();
+			var clicked = false;
+			var param;
+			var gui;
+			var toolPosition = [];
+			var toolSlider = false;
+
+
+			init();
+			animate();
+
+			function init() {
+
+				//creation of camera and light(three spotlight)
+				container = document.getElementById( 'container' );
+
+				camera = new THREE.PerspectiveCamera( 25, window.innerWidth / window.innerHeight, 1, 10000 );
+				camera.position.set( - 7, 4, 7 );
+
+				scene = new THREE.Scene();
+
+				renderer = new THREE.WebGLRenderer( { antialias: true } );
+				renderer.setClearColor(0x000000, 1); 
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				renderer.sortObjects = false;
+				container.appendChild( renderer.domElement );
+				render.autoclear = false;
+
+				var ambientLight = new THREE.AmbientLight( 0xffffff,1.6);
+				scene.add( ambientLight );
+
+				/****************************************************/
+				//load of different stl files(conveyor belt, light..)
+				var loader = new THREE.STLLoader();
+				var text = THREE.ImageUtils.loadTexture('Texture/conveyor_text.jpg');
+				loader.load( 'STL_Scene/conveyor_3.stl', function ( geometry ) {
+
+					var material = new THREE.MeshPhongMaterial( { color: 0x808080, specular: 0x111111, shininess: 80,map: text } );
+					var mesh = new THREE.Mesh( geometry, material );
+
+					mesh.position.set( 1.8,  0.17, 0.016 );
+					mesh.scale.set( 0.0007, 0.0002, 0.0024 );
+
+					mesh.castShadow = true;
+					//mesh.receiveShadow = true;
+
+					scene.add( mesh );
+
+				} );
+
+				loader.load( 'STL_Scene/conveyor_3.stl', function ( geometry ) {
+
+					var material = new THREE.MeshPhongMaterial( { color: 0x808080, specular: 0x111111, shininess: 80,map: text } );
+					var mesh = new THREE.Mesh( geometry, material );
+
+					mesh.position.set( -1.28,  0.17, -0.25 );
+					mesh.rotation.set(0 ,  Math.PI/2 , 0 );
+					mesh.scale.set( 0.0005, 0.0002, 0.0014 );
+
+					mesh.castShadow = true;
+					//mesh.receiveShadow = true;
+
+					scene.add( mesh );
+
+				} );
+
+				loader.load( 'STL_Scene/led_without_lamp.stl', function ( geometry ) {
+
+					var material = new THREE.MeshPhongMaterial( { color: 0x151515, specular: 0x111111, shininess: 200 } );
+					var mesh = new THREE.Mesh( geometry, material );
+
+					mesh.position.set( 2.9,  1, 0 );
+					mesh.rotation.set( Math.PI, 0, -1.5*Math.PI);
+					mesh.scale.set( 0.0008, 0.0008, 0.0008 );
+
+					//mesh.castShadow = true;
+					//mesh.receiveShadow = true;
+
+					scene.add( mesh );
+
+				} );
+
+				/****************************************************/
+				//every time we create a lamp, we insert a spotlight
+				var spotLight_3 = new THREE.SpotLight( 0xFFF5EB, 0.5 );
+				var origin_3 = new THREE.Object3D();
+				origin_3.position.set(1.5,0,0);
+				scene.add(origin_3);
+				spotLight_3.position.set( 2.9,  1, 0 );
+				//spotLight_3.castShadow = true;
+				spotLight_3.decay = 1;
+				spotLight_3.distance = 15;
+				spotLight_3.angle = Math.PI/2.2;
+				scene.add(spotLight_3);
+				spotLight_3.target = origin_3;
+				var light_3 = new THREE.PointLight( 0xffffff, 0.05, 5,1 );
+				light_3.position.set( 2.9,  1, 0 );
+
+				loader.load( 'STL_Scene/lamp.stl', function ( geometry ) {
+
+					var material = new THREE.MeshPhongMaterial( { color: 0xffffff, specular: 0x111111, shininess: 200 } );
+					var mesh = new THREE.Mesh( geometry, material );
+
+					mesh.position.set( 2.9,  1, 0 );
+					mesh.rotation.set( Math.PI, 0, -1.5*Math.PI);
+					mesh.scale.set( 0.0008, 0.0008, 0.0008 );
+
+					//mesh.castShadow = true;
+					//mesh.receiveShadow = true;
+
+					scene.add( mesh );
+
+				} );
+;
+				loader.load( 'STL_Scene/led_without_lamp.stl', function ( geometry ) {
+
+					var material = new THREE.MeshPhongMaterial( { color: 0x000000, specular: 0x111111, shininess: 200 } );
+					var mesh = new THREE.Mesh( geometry, material );
+
+					mesh.position.set( 2.9,  1, -2 );
+					mesh.rotation.set( Math.PI, 0, -1.5*Math.PI);
+					mesh.scale.set( 0.0008, 0.0008, 0.0008 );
+
+					//mesh.castShadow = true;
+					//mesh.receiveShadow = true;
+
+					scene.add( mesh );
+
+				} );
+				/****************************************************/
+				//second spotlight
+				var spotLight_2 = new THREE.SpotLight( 0xFFF5EB, 0.5 );
+				var origin_2 = new THREE.Object3D();
+				origin_2.position.set(1.5,0,-2);
+				scene.add(origin_2);
+				spotLight_2.position.set( 2.9,  1, -2 );
+				spotLight_2.decay = 1;
+				spotLight_2.distance = 15;
+				spotLight_2.angle = Math.PI/2.2;
+				scene.add(spotLight_2);
+				spotLight_2.target = origin_2;
+				//spotLight_2.castShadow = true;
+				
+				loader.load( 'STL_Scene/lamp.stl', function ( geometry ) {
+
+					var material = new THREE.MeshPhongMaterial( { color: 0xffffff, specular: 0x111111, shininess: 200 } );
+					var mesh = new THREE.Mesh( geometry, material );
+
+					mesh.position.set( 2.9,  1, -2 );
+					mesh.rotation.set( Math.PI, 0, -1.5*Math.PI);
+					mesh.scale.set( 0.0008, 0.0008, 0.0008 );
+
+					//mesh.castShadow = true;
+					//mesh.receiveShadow = true;
+
+					scene.add( mesh );
+
+				} );
+
+				loader.load( 'STL_Scene/led_without_lamp.stl', function ( geometry ) {
+
+					var material = new THREE.MeshPhongMaterial( { color: 0x000000, specular: 0x111111, shininess: 200 } );
+					var mesh = new THREE.Mesh( geometry, material );
+
+					mesh.position.set( 2.9,  1, 2 );
+					mesh.rotation.set( Math.PI, 0, -1.5*Math.PI);
+					mesh.scale.set( 0.0008, 0.0008, 0.0008 );
+
+					//mesh.castShadow = true;
+					//mesh.receiveShadow = true;
+
+					scene.add( mesh );
+
+				} );
+
+				/****************************************************/
+				//last spotlight
+				spotLight = new THREE.SpotLight( 0xFFF5EB, 0.5 );
+				var origin = new THREE.Object3D();
+				origin.position.set(1.5,0,2);
+				scene.add(origin);
+				spotLight.position.set( 2.9,  1, 2 );
+				spotLight.decay = 1;
+				spotLight.distance = 15;
+				spotLight.angle = Math.PI/2.2;
+				scene.add(spotLight);
+				spotLight.target = origin;
+				//spotLight.castShadow = true;
+				
+				var loader = new THREE.STLLoader();
+				loader.load( 'STL_Scene/lamp.stl', function ( geometry ) {
+
+					var material = new THREE.MeshPhongMaterial( { color: 0xffffff, specular: 0x111111, shininess: 200 } );
+					var mesh = new THREE.Mesh( geometry, material );
+
+					mesh.position.set( 2.9,  1, 2 );
+					mesh.rotation.set( Math.PI, 0, -1.5*Math.PI);
+					mesh.scale.set( 0.0008, 0.0008, 0.0008 );
+
+					//mesh.castShadow = true;
+					//mesh.receiveShadow = true;
+
+					scene.add( mesh );
+
+				} );				
+
+				/****************************************************/
+				//Creation of the floor
+				var cbgeometry = new THREE.PlaneGeometry( 6, 6, 10, 8 );
+				//cbgeometry.receiveShadow = true;
+				//Two different material, for square effect, same texture
+				var cbmaterials = []; 
+				cbmaterials.push( new THREE.MeshPhongMaterial( { color: 0x707070, specular: 0x111111, shininess: 60,side: THREE.DoubleSide,map: THREE.ImageUtils.loadTexture('Texture/floor_wall.png')}));
+				cbmaterials.push( new THREE.MeshPhongMaterial( { color: 0x808080, specular: 0x111111, shininess: 60,side: THREE.DoubleSide,map: THREE.ImageUtils.loadTexture('Texture/floor_wall.png')}));
+				var l = cbgeometry.faces.length / 2; 
+
+				for( var i = 0; i < l; i ++ ) {
+				    j = i * 2;
+				    cbgeometry.faces[ j ].materialIndex = ((i + Math.floor(i/8)) % 2); 
+				    cbgeometry.faces[ j + 1 ].materialIndex = ((i + Math.floor(i/8)) % 2); 
+				}
+				cb = new THREE.Mesh( cbgeometry, new THREE.MeshFaceMaterial( cbmaterials ) );
+				cb.rotation.x = 3.14/2;
+				scene.add( cb );
+
+				/****************************************************/
+				//creation of Wall. Different pieces for easier use
+				var wall_1 = new THREE.BoxGeometry( 4, 1.5,0.001);
+				var wall_1_half = new THREE.BoxGeometry( 2, 1,0.001);
+				var wall_4 = new THREE.BoxGeometry( 3, 1.5,0.1);
+				var wall_2 = new THREE.BoxGeometry( 3, 1.5,0.1);
+				var wall_3_Center = new THREE.PlaneGeometry( 2, 1,0.001);
+				var wall_3_firstHalf = new THREE.PlaneGeometry( 2, 1.5,0.001);
+				var wall_3_secondHalf = new THREE.PlaneGeometry( 2, 1.5,0.001);
+				/****************************************************/
+				//texture for the reflecting wall
+				var wall_materials = new THREE.MeshPhongMaterial( { color: 0x505050, specular: 0x111111, shininess: 60,side: THREE.DoubleSide,map: THREE.ImageUtils.loadTexture('Texture/floor_wall.png')});
+
+				var wall_2 = new THREE.Mesh( wall_2, new THREE.MeshFaceMaterial( wall_materials ) );
+				wall_2.position.y = 0.74;
+				wall_2.position.z = 1.5;
+				wall_2.position.x = 2.94;
+				wall_2.rotation.y = 3.14/2;
+				scene.add(wall_2);
+				var wall_4 = new THREE.Mesh( wall_4, new THREE.MeshFaceMaterial( wall_materials ) );
+				wall_4.position.y = 0.74;
+				wall_4.position.x = 2.94;
+				wall_4.position.z = -1.5;
+				wall_4.rotation.y = 3.14/2;
+				scene.add(wall_4);
+
+				/****************************************************/
+				//texture for the non-reflecting wall
+				var wall_reflect = new THREE.MeshPhongMaterial({ 
+                     depthWrite: false, 
+                     transparent: true, 
+                     opacity: 0.08, 
+                     side:THREE.DoubleSide, 
+                     combine: THREE.MixOperation 
+                 }); 
+
+				var wall_1 = new THREE.Mesh( wall_1,  wall_reflect );
+				wall_1.position.y = 0.74;
+				wall_1.position.z = -3;
+				wall_1.position.x = -1;
+				scene.add(wall_1);
+
+				var wall_1_half = new THREE.Mesh( wall_1_half,  wall_reflect );
+				wall_1_half.position.y = 0.99;
+				wall_1_half.position.z = -3;
+				wall_1_half.position.x = +2;
+				scene.add(wall_1_half);
+
+				var wall_3_Center = new THREE.Mesh( wall_3_Center,  wall_reflect );
+				wall_3_Center.position.y = 0.99;
+				wall_3_Center.position.x = -3;
+				wall_3_Center.rotation.y = 3.14/2;
+				scene.add(wall_3_Center);
+
+				var wall_3_firstHalf = new THREE.Mesh( wall_3_firstHalf,  wall_reflect );
+				wall_3_firstHalf.position.y = 0.74;
+				wall_3_firstHalf.position.x = -3;
+				wall_3_firstHalf.position.z = 2;
+				wall_3_firstHalf.rotation.y = 3.14/2;
+				scene.add(wall_3_firstHalf);
+
+				var wall_3_secondHalf = new THREE.Mesh( wall_3_secondHalf,  wall_reflect );
+				wall_3_secondHalf.position.y = 0.74;
+				wall_3_secondHalf.position.x = -3;
+				wall_3_secondHalf.position.z = -2;
+				wall_3_secondHalf.rotation.y = 3.14/2;
+				scene.add(wall_3_secondHalf);
+				
+
+				/****************************************************/
+				//pole for dividing glass wall - back
+				var pole = new THREE.BoxGeometry( 0.01, 1.5,0.01);
+				var pole_materials = new THREE.MeshPhongMaterial( { color: 0x222D39, side: THREE.DoubleSide});
+				var pole = new THREE.Mesh( pole, new THREE.MeshFaceMaterial( pole_materials ) );
+				pole.position.y = 0.74;
+				pole.position.z = -3;
+				pole.position.x = 1;
+				scene.add(pole);
+				var pole_2 = new THREE.BoxGeometry( 0.01, 1.5,0.01);
+				var pole_2 = new THREE.Mesh( pole_2, new THREE.MeshFaceMaterial( pole_materials ) );
+				pole_2.position.y = 0.74;
+				pole_2.position.z = -3;
+				pole_2.position.x = -1;
+				scene.add(pole_2);
+				var pole_3 = new THREE.BoxGeometry( 0.01, 1.5,0.01);
+				var pole_3 = new THREE.Mesh( pole_3, new THREE.MeshFaceMaterial( pole_materials ) );
+				pole_3.position.y = 0.74;
+				pole_3.position.z = -3;
+				pole_3.position.x = -3;
+				scene.add(pole_3);
+				var pole_4 = new THREE.BoxGeometry( 0.01, 1.5,0.01);
+				var pole_4 = new THREE.Mesh( pole_4, new THREE.MeshFaceMaterial( pole_materials ) );
+				pole_4.position.y = 0.74;
+				pole_4.position.z = -3;
+				pole_4.position.x = 3;
+				scene.add(pole_4);
+				var pole_5 = new THREE.BoxGeometry( 2, 0.01,0.01);
+				var pole_5 = new THREE.Mesh( pole_5, new THREE.MeshFaceMaterial( pole_materials ) );
+				pole_5.position.y = 0.5;
+				pole_5.position.z = -3;
+				pole_5.position.x = 2;
+				scene.add(pole_5);
+
+
+				/****************************************************/
+				//pole for dividing glass wall - lateral
+				var pole_6 = new THREE.BoxGeometry( 0.01, 1.5,0.01);
+				var pole_6 = new THREE.Mesh( pole_6, new THREE.MeshFaceMaterial( pole_materials ) );
+				pole_6.position.y = 0.74;
+				pole_6.position.z = -1;
+				pole_6.position.x = -3;
+				scene.add(pole_6);
+				var pole_7 = new THREE.BoxGeometry( 0.01, 1.5,0.01);
+				var pole_7 = new THREE.Mesh( pole_7, new THREE.MeshFaceMaterial( pole_materials ) );
+				pole_7.position.y = 0.74;
+				pole_7.position.z = -1;
+				pole_7.position.x = -3;
+				scene.add(pole_7);
+				var pole_8 = new THREE.BoxGeometry( 0.01, 1.5,0.01);
+				var pole_8 = new THREE.Mesh( pole_8, new THREE.MeshFaceMaterial( pole_materials ) );
+				pole_8.position.y = 0.74;
+				pole_8.position.z = 1;
+				pole_8.position.x = -3;
+				scene.add(pole_8);
+				var pole_9 = new THREE.BoxGeometry( 0.01, 1.5,0.01);
+				var pole_9 = new THREE.Mesh( pole_9, new THREE.MeshFaceMaterial( pole_materials ) );
+				pole_9.position.y = 0.74;
+				pole_9.position.z = 3;
+				pole_9.position.x = -3;
+				scene.add(pole_9);
+
+
+				/****************************************************/
+				//material and setInterval for animation of cube
+				cube_materials = new THREE.MeshPhongMaterial( { color: 0x4D2700,specular: 0x111111, shininess: 150,map: THREE.ImageUtils.loadTexture('Texture/cube.jpg')});
+				var myVar = setInterval(function(){ cubeCreation() }, 7000);
+
+				/****************************************************/
+				//creation of the robot
+				addRobot();
+				/****************************************************/
+				//creation of the GUI
+				addGui();
+				/****************************************************/
+				//after some step, we update the gui with the position of the end effector
+				setTimeout(function(){ updateGuiTool() }, 2000);
+
+				/****************************************************/
+				//mouse control
+				controls = new THREE.OrbitControls( camera, renderer.domElement );
+
+				
+				/****************************************************/
+				//fps control
+				stats = new Stats();
+				container.appendChild( stats.dom );
+
+				window.addEventListener( 'resize', onWindowResize, false );
+				window.addEventListener( 'mousedown', onMouseClick, false );
+
+			}
+
+			/****************************************************/
+			//event for resize
+			function onWindowResize() {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+			/****************************************************/
+			//principale animation
+			function animate() {
+				var pos_End;
+				/****************************************************/
+				//animation for cube. They disappear if in the end of floor, and grasping if the robot is near
+				for(var i = 0; i < cube_activated.length; i++) {
+					if(cube_activated[i].position.z <= -2.9) {
+						scene.remove(cube_activated[i]);
+						cube_activated.splice(i,1);
+					}
+					cube_activated[i].position.z -= 0.008;
+					if(!cubeAttached && ee && (cube_activated[i].position.z < 0.6 && cube_activated[i].position.y > -0.6)) {
+					 	pos_End = positionTool();
+					
+					 	/****************************************************/
+						//check for grasping
+					 	if(pos_End[2] <= 0.32 && (pos_End[1] <= -cube_activated[i].position.z + 0.2 && pos_End[1] >= -cube_activated[i].position.z - 0.2 ) && (pos_End[2] <= cube_activated[i].position.y + 0.2 && pos_End[2] >= cube_activated[i].position.y - 0.2) && (pos_End[0] <= cube_activated[i].position.x + 0.1 && pos_End[0] >= cube_activated[i].position.x - 0.1)) {
+					 		cubeAttached = cube_activated[i];
+					 		cube_activated.splice(i,1);
+					 	}
+
+					}
+				}
+
+				if(ee) {
+					pos_End = positionTool();
+				}
+				/****************************************************/
+				//attaching cube grasped with the end effector position(a little bit traslated)
+				if(cubeAttached) {
+					pos_End = positionTool(-0.06);
+					cubeAttached.position.x = pos_End[0];
+					cubeAttached.position.y = pos_End[2];
+					cubeAttached.position.z = -pos_End[1];
+					if(pos_End[0] < 0.47 && (pos_End[1] <= 0.48 && pos_End[1] >= 0.156) && pos_End[2] < 0.3) {
+						var cube = new THREE.BoxGeometry( 0.1, 0.1,0.1);
+						var cube = new THREE.Mesh( cube, cube_materials);
+						cube.position.y = 0.24;
+						cube.position.z = -pos_End[1];
+						cube.position.x = pos_End[0];
+						cube_activated_second.push(cube);
+						scene.add(cube);
+						scene.remove(cubeAttached);
+						cubeAttached = null;
+					}
+
+				}
+
+				/****************************************************/
+				//animation for the second conveyor belt
+				for(var i = 0; i < cube_activated_second.length; i++) {
+					if(cube_activated_second[i].position.x <= -2.9) {
+						scene.remove(cube_activated_second[i]);
+						cube_activated_second.splice(i,1);
+					}
+					if(cube_activated_second[i])
+						cube_activated_second[i].position.x -= 0.01;
+				}
+
+				requestAnimationFrame( animate );
+
+				render();
+				stats.update();
+
+			}
+
+
+			/****************************************************/
+			//render function. Also used for step Inverse Kinematic
+			var error = 1;
+			var inverse = false;
+			function render() {
+				/****************************************************/
+				//if we click on the scene, we take the cube intersected
+				if(clicked) {
+					raycaster.setFromCamera( mouse, camera );
+					var	intersects = raycaster.intersectObjects( cube_activated );
+					if(intersects && intersects[0]) {
+						cube_clicked = intersects[0].object;
+						inverse = true;
+					}
+				clicked = false;
+				}
+
+				/****************************************************/
+				//InverseKinematic for the GUI slider
+				if(inverse && toolSlider && error > 0.1) {
+					inverseKinematics(toolPosition[0],toolPosition[1],toolPosition[2]);
+				}
+				/****************************************************/
+				//InverseKinematic for the clicked cube
+				else if(inverse && cube_clicked && error > 0.1) {
+					inverseKinematics(cube_clicked.position.x,-cube_clicked.position.z,cube_clicked.position.y); 
+				}
+				else if(error <= 0.1 && toolSlider) {
+					error = 1;
+					inverse = false;
+					toolSlider = false; 
+				}
+				else if(error <= 0.1) {
+					error = 1;
+					updateGuiTool();
+					inverse = false;
+					toolSlider = false;
+				}
+
+
+				renderer.render( scene, camera );
+
+			}
+
+
+			/****************************************************/
+			//function for creation of the cubes, called by a set interval in the init
+			function cubeCreation() {
+				var cube = new THREE.BoxGeometry( 0.1, 0.1,0.1);
+				var cube = new THREE.Mesh( cube, cube_materials);
+				cube.position.y = 0.24;
+				cube.position.z = 3;
+				cube.position.x = 1.7;
+				cube_activated.push(cube);
+				scene.add(cube);
+			}
+
+			/****************************************************/
+			//creation of the robot by hierarchicals groups and stl
+			function addRobot() {
+				var loader = new THREE.STLLoader();
+				this.mesh = new THREE.Object3D();
+				var text = THREE.ImageUtils.loadTexture('Texture/robot_text.jpg');
+				var fourth;
+				/****************************************************/
+				//we load the different pieces
+				loader.load('KR5_850/Base.stl', function (geometry) {
+					var material = new THREE.MeshPhongMaterial({ color: 0x202020, specular: 0x111111, shininess: 60,map: text});
+					var base = new THREE.Mesh( geometry, material);
+					//base.castShadow = true;
+					//base.receiveShadow = true;
+
+					this.mesh.add(base);
+				});
+
+				loader.load('KR5_850/First.stl', function (geometry) {
+					var material = new THREE.MeshPhongMaterial({ color: 0x202020, specular: 0x111111, shininess: 60,map: text});
+					var first = new THREE.Mesh( geometry, material);
+					//first.castShadow = true;
+					//first.receiveShadow = true;
+
+					st_block.add(first);
+				});
+
+
+				nd_block.position.z = 335;
+				nd_block.position.x = 75;
+
+				loader.load('KR5_850/Second.stl', function (geometry) {
+					var material = new THREE.MeshPhongMaterial({ color: 0x404040, specular: 0x111111, shininess: 60,map: text});
+					var second = new THREE.Mesh( geometry, material);
+					second.position.set(-75, 0, -335);
+					//second.castShadow = true;
+					//second.receiveShadow = true;
+
+					nd_block.add(second);
+				});
+
+				rd_block.position.z = 360;
+
+				loader.load('KR5_850/Third.stl', function (geometry) {
+					var material = new THREE.MeshPhongMaterial({ color: 0x404040, specular: 0x111111, shininess: 60,map: text});
+					var third = new THREE.Mesh( geometry, material);
+					third.position.set(-75, 0, -335-360);
+					//third.castShadow = true;
+					//third.receiveShadow = true;
+
+					rd_block.add(third);
+				});
+
+				rt_block.position.z = 90;
+
+				loader.load('KR5_850/Fourth.stl', function (geometry) {
+					var material = new THREE.MeshPhongMaterial({ color: 0x404040, specular: 0x111111, shininess: 60,map: text});
+					fourth = new THREE.Mesh( geometry, material);
+					fourth.position.set(-75, 0, -335-360-90);
+					//fourth.castShadow = true;
+					//fourth.receiveShadow = true;
+
+					rt_block.add(fourth);
+				});
+
+				loader.load('KR5_850/ScrittaKuka.stl', function (geometry) {
+					var material = new THREE.MeshPhongMaterial({ color: 0xcc0000, specular: 0x111111, shininess: 60,map: text});
+					var scritta = new THREE.Mesh( geometry, material);
+					//scritta.castShadow = true;
+					//scritta.receiveShadow = true;
+
+					fourth.add(scritta);
+				});
+
+				ee_block.position.x = 405
+
+				loader.load('KR5_850/EndEffector.stl', function (geometry) {
+					var material = new THREE.MeshPhongMaterial({ color: 0x202020, specular: 0x111111, shininess: 60,map: text});
+					ee = new THREE.Mesh( geometry, material);
+					ee.position.set(-75-405, 0, -335-360-90);
+					//ee.castShadow = true;
+					//ee.receiveShadow = true;
+
+
+					ee_block.add(ee);
+				});
+
+				rt_block.add(ee_block);
+				rd_block.add(rt_block);
+				nd_block.add(rd_block);
+				st_block.add(nd_block);
+
+				this.mesh.add(st_block);
+				/****************************************************/
+				//we scale and position/rotate the robot into the scen
+				this.mesh.scale.set( 0.001, 0.001, 0.001);
+				this.mesh.position.set(1, 0, 0);
+				this.mesh.rotation.x = -Math.PI/2.0;
+
+
+				scene.add(this.mesh);
+
+			}
+
+
+			/****************************************************/
+			//direct kinematic for the KR5-850
+			var a1 = 75*0.001;
+			var a2 = 360*0.001; 
+			var a3 = 90*0.001;
+			var d1 = 335*0.001;
+			var d4 = -405*0.001;
+			var d_End = -75*0.001;
+			function positionTool(displacement = 0) {
+				var pos_x = Math.cos(st_block.rotation.z)*(a1 + a3*Math.cos(nd_block.rotation.y + rd_block.rotation.y - Math.PI/2.0) + a2*Math.cos(nd_block.rotation.y - Math.PI/2.0)) + Math.sin(nd_block.rotation.y + rd_block.rotation.y - Math.PI/2.0)*Math.cos(st_block.rotation.z)*(d4 + (d_End+displacement)*Math.cos(ee_block.rotation.y)) - (d_End + displacement)*Math.sin(st_block.rotation.z)*Math.sin(rt_block.rotation.x) * Math.sin(ee_block.rotation.y)+(d_End + displacement)*Math.cos(nd_block.rotation.y + rd_block.rotation.y - Math.PI/2.0)*Math.cos(st_block.rotation.z)*Math.cos(rt_block.rotation.x)*Math.sin(ee_block.rotation.y) + 1;
+				var pos_y = Math.sin(st_block.rotation.z)*(a1 + a3*Math.cos(nd_block.rotation.y + rd_block.rotation.y - Math.PI/2.0) + a2*Math.cos(nd_block.rotation.y - Math.PI/2.0)) + Math.sin(nd_block.rotation.y + rd_block.rotation.y - Math.PI/2.0)*Math.sin(st_block.rotation.z)*(d4 + (d_End + displacement)*Math.cos(ee_block.rotation.y)) + (d_End + displacement)*Math.cos(st_block.rotation.z)*Math.sin(rt_block.rotation.x) * Math.sin(ee_block.rotation.y)+(d_End + displacement)*Math.cos(nd_block.rotation.y + rd_block.rotation.y - Math.PI/2.0)*Math.sin(st_block.rotation.z)*Math.cos(rt_block.rotation.x)*Math.sin(ee_block.rotation.y) ;
+				var pos_z = d1 + Math.cos(nd_block.rotation.y + rd_block.rotation.y - Math.PI/2.0)*(d4 + (d_End + displacement)*Math.cos(ee_block.rotation.y)) - a3*Math.sin(nd_block.rotation.y + rd_block.rotation.y - Math.PI/2.0) - a2*Math.sin(nd_block.rotation.y - Math.PI/2.0) - (d_End + displacement)*Math.sin(nd_block.rotation.y + rd_block.rotation.y - Math.PI/2.0)*Math.cos(rt_block.rotation.x)*Math.sin(ee_block.rotation.y);
+				return [pos_x,pos_y,pos_z];
+			}
+
+
+			/****************************************************/
+			//gui creation, called by the init
+			function addGui() {
+				gui = new dat.GUI( { width: 400 } );
+				gui.open();
+
+				param = {
+					'Joint 1': joint1,
+					'Joint 2': joint2,
+					'Joint 3': joint3,
+					'Joint 4': joint4,
+					'Joint 5': joint5,
+					'Pose  X': poseX,
+					'Pose  Y': poseY,
+					'Pose  Z': poseZ
+				};
+
+				var jointFolder = gui.addFolder( 'Actuator' );
+				var endFolder = gui.addFolder( 'EndEffector' );
+
+				jointFolder.add( param, 'Joint 1', -Math.PI, Math.PI ).step(0.0001).onChange( function ( val ) {
+					var old_value  = st_block.rotation.z;
+					st_block.rotation.z = val;
+					if(collisionCheck())
+						st_block.rotation.z = old_value;
+				} );
+
+				jointFolder.add( param, 'Joint 2', -Math.PI/2.0, Math.PI/2.0 ).step(0.0001).onChange( function ( val ) {
+					var old_value  = nd_block.rotation.y;
+					nd_block.rotation.y = val;
+					if(collisionCheck())
+						nd_block.rotation.y = old_value;
+				} );
+
+
+				jointFolder.add( param, 'Joint 3', -Math.PI/3.0, Math.PI/3.0 ).step(0.0001).onChange( function ( val ) {
+					var old_value  = rd_block.rotation.y;
+					rd_block.rotation.y = val;
+					if(collisionCheck())
+						rd_block.rotation.y = old_value;
+				} );
+
+				jointFolder.add( param, 'Joint 4', -Math.PI/3.0, Math.PI/3.0 ).step(0.0001).onChange( function ( val ) {
+					var old_value  = rt_block.rotation.x;
+					rt_block.rotation.x = val;
+					if(collisionCheck())
+						rt_block.rotation.x = old_value;
+				} );
+				
+				jointFolder.add( param, 'Joint 5', -Math.PI/2.0, Math.PI/2.0 ).step(0.0001).onChange( function ( val ) {
+					var old_value  = ee_block.rotation.y;
+					ee_block.rotation.y = val;
+					if(collisionCheck())
+						ee_block.rotation.y = old_value;
+				} );
+
+				endFolder.add( param, 'Pose  X', 0.3, 1.7 ).step(0.001).onChange( function ( val ) {
+					toolPosition = positionTool();
+					toolPosition[0] = val;
+					toolSlider = true;
+					inverse = true;
+				} );
+				endFolder.add( param, 'Pose  Y', -0.5, 0.5 ).step(0.001).onChange( function ( val ) {
+					toolPosition = positionTool();
+					toolPosition[1] = val;
+					toolSlider = true;
+					inverse = true;
+				} );
+				endFolder.add( param, 'Pose  Z', 0.25, 1 ).step(0.001).onChange( function ( val ) {
+					toolPosition = positionTool();
+					toolPosition[2] = val;
+					toolSlider = true;
+					inverse = true;
+				} );
+
+
+				endFolder.open();
+				jointFolder.open();
+			}
+
+			/****************************************************/
+			//after the kinematic inversion and the reaching of the target, we update the end-effector sliders
+			function updateGuiTool() {
+				toolPosition = positionTool();
+				gui.__folders.EndEffector.__controllers[0].setValue(toolPosition[0]);
+				gui.__folders.EndEffector.__controllers[1].setValue(toolPosition[1]);
+				gui.__folders.EndEffector.__controllers[2].setValue(toolPosition[2]);
+			}
+
+			/****************************************************/
+			//collision check JUST for the end effector, with the conveyor belt and floor
+			function collisionCheck() {
+				var pos_End = positionTool();
+				if(pos_End[2] <= 0.02 || (pos_End[2] <= 0.28 && (pos_End[0] >= 1.60 || (pos_End[0] < 0.47 &&  pos_End[1] <= 0.48 && pos_End[1] >= 0.17  )))) {
+					return true;
+				}
+				else 
+					return false;
+			}
+
+			/****************************************************/
+			//mouse-click event for intersection
+			function onMouseClick( event ) {
+				mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+				mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+				clicked = true;	
+			}
+
+
+			/****************************************************/
+			//the kinematic inversion, using the gradient method
+			function inverseKinematics (pos_dest_x,pos_dest_y,pos_dest_z) {
+				var q1 = st_block.rotation.z;
+				var q2 = nd_block.rotation.y;
+				var q3 = rd_block.rotation.y;
+				var q4 = rt_block.rotation.x;
+				var q_ee = ee_block.rotation.y;
+				var pi = Math.PI;
+
+				/****************************************************/
+				//Jacobian. We use an external library (mathjs) for matrix calculation
+				var J_T = math.matrix([[ - Math.sin(q1)*(a1 + a3*Math.cos(q2 + q3 - pi/2) + a2*Math.cos(q2 - pi/2)) - Math.sin(q2 + q3 - pi/2)*Math.sin(q1)*(d4 + d_End*Math.cos(q_ee)) - d_End*Math.cos(q1)*Math.sin(q4)*Math.sin(q_ee) - d_End*Math.cos(q2 + q3 - pi/2)*Math.cos(q4)*Math.sin(q1)*Math.sin(q_ee), Math.cos(q1)*(a1 + a3*Math.cos(q2 + q3 - pi/2) + a2*Math.cos(q2 - pi/2)) + Math.sin(q2 + q3 - pi/2)*Math.cos(q1)*(d4 + d_End*Math.cos(q_ee)) - d_End*Math.sin(q1)*Math.sin(q4)*Math.sin(q_ee) + d_End*Math.cos(q2 + q3 - pi/2)*Math.cos(q1)*Math.cos(q4)*Math.sin(q_ee), 0],
+					   [ Math.cos(q2 + q3 - pi/2)*Math.cos(q1)*(d4 + d_End*Math.cos(q_ee)) - Math.cos(q1)*(a3*Math.sin(q2 + q3 - pi/2) + a2*Math.sin(q2 - pi/2)) - d_End*Math.sin(q2 + q3 - pi/2)*Math.cos(q1)*Math.cos(q4)*Math.sin(q_ee),                                        Math.cos(q2 + q3 - pi/2)*Math.sin(q1)*(d4 + d_End*Math.cos(q_ee)) - Math.sin(q1)*(a3*Math.sin(q2 + q3 - pi/2) + a2*Math.sin(q2 - pi/2)) - d_End*Math.sin(q2 + q3 - pi/2)*Math.cos(q4)*Math.sin(q1)*Math.sin(q_ee), - a3*Math.cos(q2 + q3 - pi/2) - Math.sin(q2 + q3 - pi/2)*(d4 + d_End*Math.cos(q_ee)) - a2*Math.cos(q2 - pi/2) - d_End*Math.cos(q2 + q3 - pi/2)*Math.cos(q4)*Math.sin(q_ee)],
+
+					   [Math.cos(q2 + q3 - pi/2)*Math.cos(q1)*(d4 + d_End*Math.cos(q_ee)) - a3*Math.sin(q2 + q3 - pi/2)*Math.cos(q1) - d_End*Math.sin(q2 + q3 - pi/2)*Math.cos(q1)*Math.cos(q4)*Math.sin(q_ee),                                                              Math.cos(q2 + q3 - pi/2)*Math.sin(q1)*(d4 + d_End*Math.cos(q_ee)) - a3*Math.sin(q2 + q3 - pi/2)*Math.sin(q1) - d_End*Math.sin(q2 + q3 - pi/2)*Math.cos(q4)*Math.sin(q1)*Math.sin(q_ee),                     - a3*Math.cos(q2 + q3 - pi/2) - Math.sin(q2 + q3 - pi/2)*(d4 + d_End*Math.cos(q_ee)) - d_End*Math.cos(q2 + q3 - pi/2)*Math.cos(q4)*Math.sin(q_ee)],
+                       [- d_End*Math.cos(q4)*Math.sin(q1)*Math.sin(q_ee) - d_End*Math.cos(q2 + q3 - pi/2)*Math.cos(q1)*Math.sin(q4)*Math.sin(q_ee),                                                                                                                  d_End*Math.cos(q1)*Math.cos(q4)*Math.sin(q_ee) - d_End*Math.cos(q2 + q3 - pi/2)*Math.sin(q1)*Math.sin(q4)*Math.sin(q_ee),                                                                                             d_End*Math.sin(q2 + q3 - pi/2)*Math.sin(q4)*Math.sin(q_ee)],
+                        [ 0,   0,   0]]);
+
+				var p_rob = positionTool(); 
+
+
+				var q_rob = math.matrix([[q1],[q2],[q3],[q4],[q_ee]]);
+				p_rob = math.matrix([[-p_rob[0]],[-p_rob[1]],[-p_rob[2]]]);
+				var p_des = math.matrix([[pos_dest_x],[pos_dest_y],[pos_dest_z]]);
+
+				var e_x = math.subset(p_des,math.index(0, 0)) + math.subset(p_rob,math.index(0, 0));
+				var e_y = math.subset(p_des,math.index(1, 0)) + math.subset(p_rob,math.index(1, 0));
+				var e_z = math.subset(p_des,math.index(2, 0)) + math.subset(p_rob,math.index(2, 0));
+
+				error = Math.sqrt(Math.pow(e_x,2)+Math.pow(e_y,2)+Math.pow(e_z,2));
+
+				var sum = math.add(p_des,p_rob);
+
+				var update = math.multiply(J_T,sum);
+				update = math.multiply(0.25,update);
+
+				q_rob = math.add(q_rob,update);
+
+				st_block.rotation.z=math.subset(q_rob,math.index(0, 0));
+				nd_block.rotation.y=math.subset(q_rob,math.index(1, 0));
+				rd_block.rotation.y=math.subset(q_rob,math.index(2, 0));
+				rt_block.rotation.x=math.subset(q_rob,math.index(3, 0));
+				ee_block.rotation.y=math.subset(q_rob,math.index(4, 0));
+
+				/****************************************************/
+				//update of the joint sliders			
+				gui.__folders.Actuator.__controllers[0].setValue(st_block.rotation.z);
+				gui.__folders.Actuator.__controllers[1].setValue(nd_block.rotation.y);
+				gui.__folders.Actuator.__controllers[2].setValue(rd_block.rotation.y);
+				gui.__folders.Actuator.__controllers[3].setValue(rt_block.rotation.x);
+				gui.__folders.Actuator.__controllers[4].setValue(ee_block.rotation.y);
+			}
+
+
+		</script>
+
+	</body>
+</html>
